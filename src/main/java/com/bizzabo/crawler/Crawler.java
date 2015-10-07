@@ -7,20 +7,19 @@ import org.jsoup.select.Elements;
 
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
 
 public class Crawler {
 
 	private static Crawler instance = new Crawler();
 	private static Set<String> pagesVisited = new HashSet<String>();
-//		public static final List<String> pagesToVisitList = new LinkedList<String>();
-	public final static BlockingQueue<String> pagesToVisitList = new LinkedBlockingQueue<String>();
+		public static final List<String> pagesToVisitList = new LinkedList<String>();
+//	public final static BlockingQueue<String> pagesToVisitList = new LinkedBlockingQueue<String>();
 	private String basePageUrl;
 	private int numberOfWorkers;
 	private static int totalPagesToScan;
+	public static final Object lock = new Object();
 
 
 	private Crawler()
@@ -47,7 +46,7 @@ public class Crawler {
 
 	public static synchronized String nextUrl() throws InterruptedException
 	{
-		String link = pagesToVisitList.take();
+		String link = pagesToVisitList.remove(0);
 		if (pagesVisited.contains(link))
 		{
 			return null;
@@ -77,49 +76,64 @@ public class Crawler {
 
 	protected void crawl() throws InterruptedException
 	{
-		pagesToVisitList.put(basePageUrl);
+		pagesToVisitList.add(basePageUrl);
 		ExecutorService executor = Executors.newFixedThreadPool(this.numberOfWorkers);
-//		while (!pagesToVisitList.isEmpty() && totalPagesToScan > 0) {
-//			Runnable worker = new WorkerThread(nextUrl());
-//			executor.execute(worker);
+		for(String s : pagesToVisitList)
+		{
+			decTotalPagesToScan();
+			Runnable worker = new WorkerThread(nextUrl());
+			executor.execute(worker);
+				synchronized (lock)
+				{
+					worker.wait();
+				}
+
+		}
+		
+
+
+
+//		executor.shutdown();
+//		while (!executor.isTerminated()) {
+//		}
+//		System.out.println("Finished all threads");
+
+
+//		while ( totalPagesToScan >0 && !pagesToVisitList.isEmpty()) {
+//			executor.submit(new Runnable() {
+//
+//
+//				public void run() {
+//					while (!Thread.currentThread().isInterrupted() ) {
+//						try {
+//							System.out.println(Thread.currentThread().getName());
+//							String item = pagesToVisitList.take();
+//							try
+//							{
+//								if (totalPagesToScan >0)
+//								{
+//									jsoup(item);
+//									Crawler.decTotalPagesToScan();
+//								}
+//								else{
+//									throw new InterruptedException("ss");
+//								}
+//							} catch(IOException e)
+//							{
+//								e.printStackTrace();
+//							}
+//
+//							// Process item
+//						} catch (InterruptedException ex) {
+//							Thread.currentThread().interrupt();
+//							break;
+//						}
+//					}
+//				}
+//			});
 //		}
 
 
-		while ( totalPagesToScan >0 && !pagesToVisitList.isEmpty()) {
-			executor.submit(new Runnable() {
-
-
-				public void run() {
-					while (!Thread.currentThread().isInterrupted() ) {
-						try {
-							System.out.println(Thread.currentThread().getName());
-							String item = pagesToVisitList.take();
-							try
-							{
-								if (totalPagesToScan >0)
-								{
-									jsoup(item);
-									Crawler.decTotalPagesToScan();
-								}
-								else{
-									throw new InterruptedException("ss");
-								}
-							} catch(IOException e)
-							{
-								e.printStackTrace();
-							}
-
-							// Process item
-						} catch (InterruptedException ex) {
-							Thread.currentThread().interrupt();
-							break;
-						}
-					}
-				}
-			});
-		}
-
-		executor.shutdown();
 	}
 
 	public static synchronized void decTotalPagesToScan()
@@ -127,16 +141,15 @@ public class Crawler {
 		totalPagesToScan--;
 	}
 
-	public static synchronized void addPageToPagesToVisitList(String link) throws InterruptedException
+	public static  void addPageToPagesToVisitList(String link)
 	{
-		pagesToVisitList.put(link);
-		Crawler.pagesToVisitList.notifyAll();
+		pagesToVisitList.add(link);
+//		Crawler.pagesToVisitList.notifyAll();
+		synchronized (lock) {
+			lock.notifyAll();
+		}
 	}
 
-	public static BlockingQueue<String> getPagesToVisitList()
-	{
-		return pagesToVisitList;
-	}
 
 	public void jsoup (String link) throws IOException, InterruptedException
 	{
@@ -145,7 +158,7 @@ public class Crawler {
 		Document htmlDocument = connection.get();
 		Elements linksOnPage = htmlDocument.select("a[href]");
 		System.out.println(htmlDocument.select("title").text());
-		pagesToVisitList.put("http://ifatzohar.com");
+		pagesToVisitList.add("http://ifatzohar.com");
 	}
 }
 

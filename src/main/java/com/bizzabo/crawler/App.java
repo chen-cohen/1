@@ -12,7 +12,10 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-
+/**
+ * Hello world!
+ *
+ */
 public class App
 {
     private static Set<String> pagesVisited = new HashSet<String>();
